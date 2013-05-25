@@ -59,6 +59,8 @@ if (!$args->passed('--import-database')) {
     dieCli('You must specify the database to import.');
 }
 
+$import_database = $args->get_full_passed('--import-database');
+
 $asagi = $json->settings->boardSettings;
 $default = $asagi->default;
 unset($asagi->default);

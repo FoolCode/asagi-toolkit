@@ -4,13 +4,13 @@
  */
 
 function createBoard($board_engine, $database, $board) {
-    $boards = file_get_contents('resources/sql/'.$board_engine.'/boards.sql');
+    $boards = file_get_contents('resources/sql/'.$board_engine.'/db-000-boards.sql');
     $boards = str_replace(array('%%BOARD%%'), array($shortname), $boards);
 
     $db->query($boards);
     if ($db->error) dieCli('[database error] '.$db->error);
 
-    $triggers = file_get_contents('resources/sql/'.$board_engine.'/triggers.sql');
+    $triggers = file_get_contents('resources/sql/'.$board_engine.'/db-000-triggers.sql');
     $triggers = str_replace(array('%%BOARD%%'), array($shortname), $triggers);
 
     $db->query($triggers);
@@ -178,13 +178,13 @@ foreach($asagi as $shortname => $settings) {
 
             // lets start the insertion process
             if ($max_doc_id <= 200000) {
-                $insert_full_sql = file_get_contents('resources/sql/'.$board_engine.'/insert-full.sql');
+                $insert_full_sql = file_get_contents('resources/sql/'.$board_engine.'/db-000-insert-full.sql');
                 $insert_full_sql = str_replace(array('%%BOARD%%', '%%OLD_DATABASE%%', '%%NEW_DATABASE%%'), array($shortname, $old_database, $new_database), $insert_full_sql);
 
                 $db->query($insert_full_sql);
                 if ($db->error) dieCli('[database error] '.$db->error);
             } else {
-                $insert_sql = file_get_contents('resources/sql/'.$board_engine.'/insert-partial.sql');
+                $insert_sql = file_get_contents('resources/sql/'.$board_engine.'/db-000-insert-partial.sql');
                 $insert_sql = str_replace(array('%%BOARD%%', '%%OLD_DATABASE%%', '%%NEW_DATABASE%%'), array($shortname, $old_database, $new_database), $insert_sql);
 
                 // insert in small chunks
