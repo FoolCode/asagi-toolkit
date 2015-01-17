@@ -5,7 +5,9 @@ Asagi Rebuild Tool
 
 ### Syntax
 
-`$ node asagi-rebuild.js [options]`
+```
+$ node asagi-rebuild.js [options]
+```
 
 ### Install
 
@@ -16,10 +18,51 @@ $ cp config.json.example config.json
 $ (nano|vi) config.json
 ```
 
-### Usage
+### Example
 
-Refer to the source code or ask.
+```
+$ node asagi-rebuild.js -b a -d asagi -f asagi_dump -s "/var/data/asagi-dump/" -p "/var/data/boards/" -i -t
+```
+Note: This will tell the tool to use the data from `asagi_dump` to import the media files located at `/var/data/asagi-dump/` into `/var/data/boards/`.
 
 ### Description
 
 This tools was written to help simplify the process of rebuilding/importing Asagi data dumps. It is designed to only work with Asagi data dumps.
+
+**Note: Both the board source and destination `images` table are required to rebuild or import data.**
+
+### Options
+
+Options start with two dashes. Many of the options require an additional value next to them.
+
+`-b <name>`, `--board <name>`
+
+Processes the board specified.
+
+`-d <name>`, `--src-database <name>`
+
+The database source you wish to rebuild or import the data with.
+
+`-f <name>`, `--dst-database <name>`
+
+The database destination you wish to rebuild or import the data into.
+
+`-s <path>`, `--src-path <path>`
+
+The media directory source you wish to rebuild or import the data from.
+
+`-p <path>`, `--dst-path <path>`
+
+The media directory destination you wish to rebuild or import the data into.
+
+`-i`, `--process-images`
+
+Tells the tool to process the full images.
+
+`-t`, `--process-thumbs`
+
+Tells the tool to process thumbnails.
+
+`-o <offset>`, `--offset <int>`
+
+Specifies where the tool should start processing the dump at.

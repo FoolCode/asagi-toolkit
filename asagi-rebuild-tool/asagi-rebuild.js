@@ -29,7 +29,7 @@ cmd
   .parse(process.argv);
 
 var board = cmd.board;
-var src_database = cmd.database1 || 'asagi_images';
+var src_database = cmd.database1 || 'asagi';
 var dst_database = cmd.database2 || 'asagi';
 var src_path = cmd.mediaSrc || '/home/archive/src/board/';
 var dst_path = cmd.mediaDst || '/home/archive/dst/board/';

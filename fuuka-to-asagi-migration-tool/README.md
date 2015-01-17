@@ -3,13 +3,17 @@ Fuuka to Asagi Migration Tool
 
 ### Syntax
 
-`$ php migrate.php [options]`
+```
+$ php migrate.php [options]
+```
 
 Note: You will need to place a copy of your `asagi.json` file in this directory.
 
 ### Example
 
-`$ php migrate.php --old-database fuuka --old-path /path/to/fuuka/boards/ --board a --process-thumbs --process-images`
+```
+$ php migrate.php --old-database fuuka --old-path /path/to/fuuka/boards/ --board a --process-thumbs --process-images
+```
 
 ### Description
 
