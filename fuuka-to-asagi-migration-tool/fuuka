@@ -15,13 +15,6 @@ use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Helper\ProgressBar;
 
-$config = new stdClass;
-$config->hostname = 'localhost';
-$config->username = 'fuuka';
-$config->password = 'fuuka';
-$config->database = 'fuuka';
-$config->path = '/path/to/boards/';
-
 if (!file_exists('config.json')) {
     die('[FATAL ERROR] Unable to locate config.json file.'.PHP_EOL);
 }
