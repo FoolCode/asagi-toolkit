@@ -1,0 +1,251 @@
+#!/usr/bin/env php
+<?php
+
+ini_set('display_errors', 0);
+ini_set('error_reporting', 0);
+if (!file_exists('vendor/autoload.php')) {
+    die('[FATAL ERROR] You need to run: composer install'.PHP_EOL);
+}
+require 'vendor/autoload.php';
+
+use Symfony\Component\Console\Application;
+use Symfony\Component\Console\Input\InputInterface;
+use Symfony\Component\Console\Input\InputArgument;
+use Symfony\Component\Console\Input\InputOption;
+use Symfony\Component\Console\Output\OutputInterface;
+use Symfony\Component\Console\Helper\ProgressBar;
+
+$config = new stdClass;
+$config->hostname = 'localhost';
+$config->username = 'fuuka';
+$config->password = 'fuuka';
+$config->database = 'fuuka';
+$config->path = '/path/to/boards/';
+
+if (!file_exists('config.json')) {
+    die('[FATAL ERROR] Unable to locate config.json file.'.PHP_EOL);
+}
+
+$config = @json_decode(file_get_contents('config.json'));
+if (!is_object($config)) {
+    die('[FATAL ERROR] Malformed config.json file.'.PHP_EOL);
+}
+
+$console = new Application();
+$console->register('migrate')
+    ->setDefinition(array(
+        new InputOption('board', 'b', InputOption::VALUE_REQUIRED, '', null),
+        new InputOption('phase', 's', InputOption::VALUE_REQUIRED, '', null),
+        new InputOption('chunk', 'c', InputOption::VALUE_REQUIRED, '', 1000),
+        new InputOption('import-database', 'd', InputOption::VALUE_REQUIRED, '', null),
+        new InputOption('import-path', 'p', InputOption::VALUE_REQUIRED, '', null),
+        new InputOption('process-images', 'i', InputOption::VALUE_NONE, ''),
+        new InputOption('process-thumbs', 't', InputOption::VALUE_NONE, ''),
+    ))
+    ->setCode(function (InputInterface $input, OutputInterface $output) use ($config) {
+        $output->writeln('Fuuka to Asagi Migration Tool v2.0');
+        $output->writeln('==================================');
+
+        $db = new mysqli($config->hostname, $config->username, $config->password, $config->database);
+        if ($db->connect_error) {
+            return $output->writeln(sprintf('[ERROR] MySQLi Connection Error (%d): %s', $db->connect_errno, $db->connect_error));
+        }
+
+        $db->query('SET SESSION sql_mode = \'ANSI\'');
+        if (!$db->query('SHOW CHARACTER SET WHERE Charset = "utf8mb4"')->num_rows) {
+            $config->charset = 'utf8';
+            $output->writeln('[WARN] Since your MySQL Database Server does not support the UTF8MB4 character set, we will be using UTF8 as the default charset.');
+        }
+        $db->set_charset($config->charset);
+
+        if ($input->getOption('phase') === null || intval($input->getOption('phase')) === 1) {
+            $output->writeln('Phase 1: Migrating Fuuka data to Asagi format.');
+
+            if ($input->getOption('import-database') === null) {
+                return $output->writeln('[ERROR] You must provide the name of the import database.');
+            }
+
+            if ($input->getOption('import-database') === $config->database) {
+                return $output->writeln('[ERROR] The must create a separate database to contain the migrated data.');
+            }
+
+            if (!$db->query(sprintf('SHOW TABLE STATUS FROM %s WHERE Name = "%s"', $config->database, $input->getOption('board'))->num_rows)) {
+                return $output->writeln(sprintf('[ERROR] The migration table %s.%s does not exist.'), $config->database, $input->getOption('board'));
+            }
+
+            if (!$db->query(sprintf('SHOW TABLE STATUS FROM %s WHERE Name = "%s"', $input->getOption('import-database'), $input->getOption('board'))->num_rows)) {
+                $output->writeln(sprintf('[WARN] The table %s.%s does not contain any data.', $input->getOption('import-database'), $input->getOption('board')));
+                return $output->writeln('Done.');
+            }
+
+            // default variables
+            $cur_doc_id = 0;
+            $max_doc_id = 0;
+            $save_state = 'save-1-rebuild-'.$input->getOption('board');
+
+            // populate variables
+            $max_doc_id_res = $db->query('SELECT MAX(doc_id) AS total FROM "%s"."%s"');
+            if ($db->error) {
+                return $output->writeln(sprintf('[DATABASE ERROR] %s', $db->error));
+            }
+            while ($row = $max_doc_id_res->fetch_object()) {
+                $max_doc_id = $row->total;
+            }
+            if (file_exists($save_state)) {
+                $cur_doc_id = intval(file_get_contents($save_state));
+            }
+            mysqli_free_result($max_doc_id_res);
+
+            // process data
+            if ($max_doc_id <= intval($input->getOption('chunk'))) {
+                $output->writeln(sprintf('Processing entire %s.%s table into %s.%s.', $input->getOption('import-database'), $input->getOption('board'), $config->database, $input->getOption('board')));
+
+                $db->query(str_replace(
+                    array('%%BOARD%%', '%%OLD_DATABASE%%', '%%NEW_DATABASE%%'),
+                    array($input->getOption('board'), $input->getOption('import-database'), $config->database),
+                    file_get_contents('resources/insert-full.sql')
+                ));
+                if ($db->error) {
+                    return $output->writeln(sprintf('[DATABASE ERROR] %s', $db->error));
+                }
+            } else {
+                $output->writeln(sprintf('Processing %s.%s table in chunks of %d into %s.%s.', $input->getOption('import-database'), $input->getOption('board'), intval($input->getOption('chunk')), $config->database, $input->getOption('board')));
+
+                while ($cur_doc_id < $max_doc_id) {
+                    $output->writeln(sprintf('Processing %d to %d...', $cur_doc_id, $cur_doc_id + intval($input->getOption('chunk'))));
+                    file_put_contents($save_state, $cur_doc_id);
+
+                    $db->query(str_replace(
+                        array('%%BOARD%%', '%%OLD_DATABASE%%', '%%NEW_DATABASE%%', '%%START_DOC_ID%%', '%%END_DOC_ID%%'),
+                        array($input->getOption('board'), $input->getOption('import-database'), $config->database, $cur_doc_id, $cur_doc_id + intval($input->getOption('chunk'))),
+                        file_get_contents('resources/insert-partial.sql')
+                    ));
+                    if ($db->error) {
+                        return $output->writeln(sprintf('[DATABASE ERROR] %s', $db->error));
+                    }
+
+                    $cur_doc_id += intval($input->getOption('chunk'));
+                }
+            }
+
+            $output->writeln('Phase 1: Complete.');
+        }
+
+        if ($input->getOption('phase') === null || intval($input->getOption('phase')) === 2) {
+            $output->writeln('Phase 2: Rebuilding Media Directory.');
+
+            if ($input->getOption('import-path') === null) {
+                return $output->writeln('[ERROR] You must provide the location of the import path.');
+            }
+
+            // default variables
+            $cur_doc_id = 0;
+            $max_doc_id = 0;
+            $save_state = 'save-2-rebuild-'.$input->getOption('board');
+            $old_work_path = $input->getOption('import-path').'/'.$input->getOption('board');
+            $new_work_path = $config->path.'/'.$input->getOption('board');
+
+            // populate variables
+            $max_doc_id_res = $db->query('SELECT MAX(doc_id) AS total FROM "%s"."%s"');
+            if ($db->error) {
+                return $output->writeln(sprintf('[DATABASE ERROR] %s', $db->error));
+            }
+            while ($row = $max_doc_id_res->fetch_object()) {
+                $max_doc_id = $row->total;
+            }
+            if (file_exists($save_state)) {
+                $cur_doc_id = intval(file_get_contents($save_state));
+            }
+            mysqli_free_result($max_doc_id_res);
+
+            $progress = new ProgressBar($output, $max_doc_id);
+            $progress->setProgress($cur_doc_id);
+
+            // process data
+            while ($cur_doc_id < $max_doc_id) {
+                $db->ping();
+                $output->writeln(sprintf('Processing %d to %d...', $cur_doc_id, $cur_doc_id + intval($input->getOption('chunk'))));
+                file_put_contents($save_state, $cur_doc_id);
+
+                // temp storage
+                $temp = array();
+
+                $media_res = $db->query(sprintf(
+                    '
+                        SELECT
+                            brd.doc_id, brd.media_id, brd.thread_num, brd.op, brd.media_filename, brd.preview_orig, img.media, img.preview_op, img.preview_reply
+                        FROM "%s"."%s" AS brd
+                        JOIN "%s"."%s" AS img
+                            ON brd.media_id = img.media_id
+                        WHERE doc_id >= %d AND doc_id <= %d
+                    ',
+                    $config->database, $input->getOption('board'), $config->database, $input->getOption('board'),
+                    $cur_doc_id, $cur_doc_id + intval($input->getOption('chunk'))
+                ));
+                if ($db->error) {
+                    return $output->writeln(sprintf('[DATABASE ERROR] %s', $db->error));
+                }
+
+                while ($row = $media_res->fetch_object()) {
+                    // create the old file structure path with thread_num
+                    preg_match('/(\d+?)(\d{2})\d{0,3}$/', $row->thread_num, $subpath);
+                    for ($index = 1; $index <= 2; $index++) {
+                        if (!isset($subpath[$index])) $subpath[$index] = '';
+                    }
+
+                    $preview = ($row->op) ? $row->preview_op : $row->preview_reply;
+                    if ($input->getOption('process-thumbs') && !is_null($preview)) {
+                        // make the inner paths
+                        $old_image_path_inner = str_pad($subpath[1], 4, "0", STR_PAD_LEFT) . str_pad($subpath[2], 2, "0", STR_PAD_LEFT);
+                        $old_image_path_inner = substr($old_image_path_inner, 0, 4) . '/' . substr($old_image_path_inner, 4, 2);
+                        $new_image_path_inner = substr($preview, 0, 4) . '/' . substr($preview, 4, 2);
+
+                        // make the full paths
+                        $old_image_path = $old_work_path . '/thumb/' . $old_image_path_inner . '/' . $row->preview_orig;
+                        $new_image_path = $new_work_path . '/thumb/' . $new_image_path_inner . '/' . $preview;
+
+                        if (!isset($temp['thumb'][$row->media_id][$row->op])) {
+                            if (!file_exists($new_image_path)) {
+                                @mkdir($new_work_path.'/thumb/'.$new_image_path_inner, 0777, true);
+                                if (@copy($old_image_path, $new_image_path)) {
+                                    $temp['thumb'][$row->media_id][$row->op] = true;
+                                } else {
+                                }
+                            }
+                        }
+                    }
+
+                    // process that full image!
+                    if ($input->getOption('process-images') && !is_null($row->media)) {
+                        // make the inner paths
+                        $old_full_image_path_inner = str_pad($subpath[1], 4, "0", STR_PAD_LEFT) . str_pad($subpath[2], 2, "0", STR_PAD_LEFT);
+                        $old_full_image_path_inner = substr($old_full_image_path_inner, 0, 4) . '/' . substr($old_full_image_path_inner, 4, 2);
+                        $new_full_image_path_inner = substr($row->media, 0, 4) . '/' . substr($row->media, 4, 2);
+
+                        // make the full paths
+                        $old_full_image_path = $old_work_path . '/img/' . $old_full_image_path_inner . '/' . $row->media_filename;
+                        $new_full_image_path = $new_work_path . '/image/' . $new_full_image_path_inner . '/' . $row->media;
+
+                        if (!isset($temp['image'][$row->media_id])) {
+                            if (!file_exists($new_image_path)) {
+                                @mkdir($new_work_path.'/image/'.$new_full_image_path_inner, 0777, true);
+                                if (@copy($old_full_image_path, $new_full_image_path)) {
+                                    $temp['image'][$row->media_id] = true;
+                                }
+                            }
+                        }
+                    }
+
+                    $progress->setProgress($row->doc_id);
+                }
+                mysqli_free_result($media_res);
+
+                $cur_doc_id += intval($input->getOption('chunk'));
+            }
+
+            $progress->finish();
+            $output->writeln('Phase 2: Complete.');
+        }
+    });
+
+$console->run();
