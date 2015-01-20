@@ -46,6 +46,10 @@ Processes only the stage specified. The input value is an integer. By default, t
 
     This would rebuild the old media directory to use the new folder structure and deduplication utilized in Asagi. You will need to pass the `--process-thumbs` and/or `--process-images` in order to rebuild them. Since this process only copies the files instead of moving them, you must make sure that enough space is available for this phase to complete. You are also required to pass the `--import-path <path>` option specifying the location of the old Fuuka media directory.
 
+`-c <size>`, `--chunk <size>`
+
+Controls the size of each data chunk processed. If the database is fairly active, this option can be used to minimize the amount of deadlocks encountered. (Default: 1000)
+
 `-d <database>`, `--import-database <database>`
 
 Specify the name of the database which contains the Fuuka tables.
