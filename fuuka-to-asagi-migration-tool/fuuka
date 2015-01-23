@@ -36,10 +36,11 @@ $console->register('migrate')
         new InputOption('process-thumbs', 't', InputOption::VALUE_NONE, ''),
         new InputOption('import-retry', 'r', InputOption::VALUE_NONE, ''),
         new InputOption('import-delay', 'z', InputOption::VALUE_REQUIRED, '', 10),
+        new InputOption('asagi-mode', 'a', InputOption::VALUE_NONE, ''),
     ))
     ->setCode(function (InputInterface $input, OutputInterface $output) use ($config) {
-        $output->writeln('Fuuka to Asagi Migration Tool v2.0');
-        $output->writeln('==================================');
+        $output->writeln('Fuuka/Asagi to Asagi Migration Tool v2.1');
+        $output->writeln('========================================');
 
         $db = new mysqli($config->hostname, $config->username, $config->password, $config->database);
         if ($db->connect_error) {
@@ -98,7 +99,7 @@ $console->register('migrate')
                 $db->query(str_replace(
                     array('%%BOARD%%', '%%OLD_DATABASE%%', '%%NEW_DATABASE%%'),
                     array($input->getOption('board'), $input->getOption('import-database'), $config->database),
-                    file_get_contents('resources/insert-full.sql')
+                    file_get_contents($input->getOption('asagi-mode') ? 'resources/insert-full-asagi.sql' : 'resources/insert-full.sql')
                 ));
                 if ($db->error) {
                     return $output->writeln(sprintf('[DATABASE ERROR] %s', $db->error));
@@ -116,7 +117,7 @@ $console->register('migrate')
                     $db->query(str_replace(
                         array('%%BOARD%%', '%%OLD_DATABASE%%', '%%NEW_DATABASE%%', '%%START_DOC_ID%%', '%%END_DOC_ID%%'),
                         array($input->getOption('board'), $input->getOption('import-database'), $config->database, $cur_doc_id, $cur_doc_id + intval($input->getOption('chunk'))),
-                        file_get_contents('resources/insert-partial.sql')
+                        file_get_contents($input->getOption('asagi-mode') ? 'resources/insert-partial-asagi.sql' : 'resources/insert-partial.sql')
                     ));
                     if ($db->error) {
                         // this doesn't output the error and retries the insert query, deadlocks usually occur here
@@ -140,6 +141,10 @@ $console->register('migrate')
 
         if ($input->getOption('phase') === null || intval($input->getOption('phase')) === 2) {
             $output->writeln('Phase 2: Rebuilding Media Directory.');
+
+            if ($input->getOption('asagi-mode')) {
+                return $output->writeln('[ERROR] You cannot run this phase in `asagi` mode.');
+            }
 
             if ($input->getOption('import-path') === null) {
                 return $output->writeln('[ERROR] You must provide the location of the import path.');
