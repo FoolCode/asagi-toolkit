@@ -65,3 +65,11 @@ Tells the tool to process the full images.
 `-t`, `--process-thumbs`
 
 Tells the tool to process thumbnails.
+
+`-r`, `--import-retry`
+
+Tells the tool to retry import queries upon encountering database errors.
+
+`-z`, `--import-delay`
+
+Specifies the length the tool should sleep for before attempting to query the insert statement again.

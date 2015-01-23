@@ -34,6 +34,8 @@ $console->register('migrate')
         new InputOption('import-path', 'p', InputOption::VALUE_REQUIRED, '', null),
         new InputOption('process-images', 'i', InputOption::VALUE_NONE, ''),
         new InputOption('process-thumbs', 't', InputOption::VALUE_NONE, ''),
+        new InputOption('import-retry', 'r', InputOption::VALUE_NONE, ''),
+        new InputOption('import-delay', 'z', InputOption::VALUE_REQUIRED, '', 10),
     ))
     ->setCode(function (InputInterface $input, OutputInterface $output) use ($config) {
         $output->writeln('Fuuka to Asagi Migration Tool v2.0');
@@ -108,7 +110,7 @@ $console->register('migrate')
                 $progress->setProgress($cur_doc_id);
 
                 while ($cur_doc_id < $max_doc_id) {
-                    //$output->writeln(sprintf('Processing %d to %d...', $cur_doc_id, $cur_doc_id + intval($input->getOption('chunk'))));
+                    // $output->writeln(sprintf('Processing %d to %d...', $cur_doc_id, $cur_doc_id + intval($input->getOption('chunk'))));
                     file_put_contents($save_state, $cur_doc_id);
 
                     $db->query(str_replace(
@@ -117,11 +119,17 @@ $console->register('migrate')
                         file_get_contents('resources/insert-partial.sql')
                     ));
                     if ($db->error) {
-                        return $output->writeln(sprintf('[DATABASE ERROR] %s', $db->error));
-                    }
+                        // this doesn't output the error and retries the insert query, deadlocks usually occur here
+                        if (!$input->getOption('import-retry')) {
+                          return $output->writeln(sprintf('[DATABASE ERROR] %s', $db->error));
+                        }
 
-                    $progress->setProgress($cur_doc_id);
-                    $cur_doc_id += intval($input->getOption('chunk'));
+                        // let's sleep a bit to allow other process to obtain locks and finish their queries
+                        sleep(intval($input->getOption('import-delay'));
+                    } else {
+                        $progress->setProgress($cur_doc_id);
+                        $cur_doc_id += intval($input->getOption('chunk'));
+                    }
                 }
 
                 $progress->finish();
