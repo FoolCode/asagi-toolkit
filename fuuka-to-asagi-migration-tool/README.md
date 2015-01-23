@@ -72,4 +72,4 @@ Tells the tool to retry import queries upon encountering database errors.
 
 `-z`, `--import-delay`
 
-Specifies the length the tool should sleep for before attempting to query the insert statement again.
+Specifies the amount of time (seconds) the tool should sleep for before attempting to query the insert statement again. (Default: 10)
