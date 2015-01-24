@@ -126,7 +126,7 @@ $console->register('migrate')
                         }
 
                         // let's sleep a bit to allow other process to obtain locks and finish their queries
-                        sleep(intval($input->getOption('import-delay'));
+                        sleep(intval($input->getOption('import-delay')));
                     } else {
                         $progress->setProgress($cur_doc_id);
                         $cur_doc_id += intval($input->getOption('chunk'));
